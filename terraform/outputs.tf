@@ -15,5 +15,5 @@ output "ecs_service_name" {
 }
 
 output "log_group" {
-  value = aws_cloudwatch_log_group.app.name
+  value = data.aws_cloudwatch_log_group.app.name
 }

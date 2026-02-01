@@ -5,7 +5,6 @@ resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr
   enable_dns_hostnames = true
   enable_dns_support   = true
-
   tags = { Name = "${var.project}-vpc" }
 }
 
@@ -16,12 +15,10 @@ resource "aws_internet_gateway" "igw" {
 
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
-
   route {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.igw.id
   }
-
   tags = { Name = "${var.project}-public-rt" }
 }
 
@@ -30,7 +27,6 @@ resource "aws_subnet" "public_a" {
   cidr_block              = var.public_subnet_a_cidr
   availability_zone       = "${var.aws_region}a"
   map_public_ip_on_launch = true
-
   tags = { Name = "${var.project}-public-a" }
 }
 
@@ -39,7 +35,6 @@ resource "aws_subnet" "public_b" {
   cidr_block              = var.public_subnet_b_cidr
   availability_zone       = "${var.aws_region}b"
   map_public_ip_on_launch = true
-
   tags = { Name = "${var.project}-public-b" }
 }
 
@@ -53,14 +48,14 @@ resource "aws_route_table_association" "public_b" {
   route_table_id = aws_route_table.public.id
 }
 
-# Security Group: allow HTTP inbound, all outbound
+# -----------------------------
+# Security Group
+# -----------------------------
 resource "aws_security_group" "ecs_sg" {
-  name        = "${var.project}-ecs-sg"
-  description = "Allow HTTP inbound for demo"
-  vpc_id      = aws_vpc.main.id
+  name   = "${var.project}-ecs-sg"
+  vpc_id = aws_vpc.main.id
 
   ingress {
-    description = "HTTP"
     from_port   = var.container_port
     to_port     = var.container_port
     protocol    = "tcp"
@@ -68,70 +63,39 @@ resource "aws_security_group" "ecs_sg" {
   }
 
   egress {
-    description = "All outbound"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-
-  tags = { Name = "${var.project}-ecs-sg" }
 }
 
 # -----------------------------
-# CloudWatch Logs
+# EXISTING CloudWatch Log Group
 # -----------------------------
 data "aws_cloudwatch_log_group" "app" {
   name = "/ecs/self-healing-cloudops"
 }
+
 # -----------------------------
-# ECS + IAM
+# ECS Cluster
 # -----------------------------
 resource "aws_ecs_cluster" "cluster" {
   name = "${var.project}-cluster"
 }
 
-data "aws_iam_policy_document" "ecs_task_assume" {
-  statement {
-    actions = ["sts:AssumeRole"]
-    principals {
-      type        = "Service"
-      identifiers = ["ecs-tasks.amazonaws.com"]
-    }
-  }
-}
-
+# -----------------------------
+# EXISTING IAM Execution Role
+# -----------------------------
 data "aws_iam_role" "task_execution" {
-  name               = "${var.project}-task-exec-role"
-  assume_role_policy = data.aws_iam_policy_document.ecs_task_assume.json
-}
-
-resource "aws_iam_role_policy_attachment" "task_exec_attach" {
-  role       = aws_iam_role.task_execution.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-}
-
-# Extra: allow logs (usually covered, but safe)
-data "aws_iam_policy_document" "extra_logs" {
-  statement {
-    actions = [
-      "logs:CreateLogStream",
-      "logs:PutLogEvents",
-      "logs:DescribeLogStreams"
-    ]
-    resources = ["*"]
-  }
-}
-
-resource "aws_iam_role_policy" "task_exec_logs" {
-  name   = "${var.project}-task-exec-logs"
-  role   = aws_iam_role.task_execution.id
-  policy = data.aws_iam_policy_document.extra_logs.json
+  name = "${var.project}-task-exec-role"
 }
 
 # -----------------------------
-# ECS Task Definition + Service (Fargate)
+# ECS Task Definition
 # -----------------------------
+data "aws_caller_identity" "current" {}
+
 locals {
   ecr_image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/${var.ecr_repo}:${var.image_tag}"
 }
@@ -142,20 +106,19 @@ resource "aws_ecs_task_definition" "task" {
   network_mode             = "awsvpc"
   cpu                      = tostring(var.fargate_cpu)
   memory                   = tostring(var.fargate_memory)
-  execution_role_arn        = aws_iam_role.task_execution.arn
+  execution_role_arn        = data.aws_iam_role.task_execution.arn
 
   container_definitions = jsonencode([
     {
       name      = "app"
       image     = local.ecr_image
       essential = true
-      portMappings = [
-        {
-          containerPort = var.container_port
-          hostPort      = var.container_port
-          protocol      = "tcp"
-        }
-      ]
+
+      portMappings = [{
+        containerPort = var.container_port
+        protocol      = "tcp"
+      }]
+
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -164,13 +127,13 @@ resource "aws_ecs_task_definition" "task" {
           awslogs-stream-prefix = "ecs"
         }
       }
-      environment = [
-        { name = "APP_ENV", value = "demo" }
-      ]
     }
   ])
 }
 
+# -----------------------------
+# ECS Service
+# -----------------------------
 resource "aws_ecs_service" "service" {
   name            = "${var.project}-service"
   cluster         = aws_ecs_cluster.cluster.id
@@ -186,4 +149,3 @@ resource "aws_ecs_service" "service" {
 
   depends_on = [aws_internet_gateway.igw]
 }
-data "aws_caller_identity" "current" {}
