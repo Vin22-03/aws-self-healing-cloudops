@@ -1,0 +1,66 @@
+name: CI-CD | Build Image and Deploy to ECS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      ECR_REPO: self-healing-cloudops
+      IMAGE_TAG: ${{ github.sha }}
+
+    steps:
+      # 1️⃣ Checkout
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2️⃣ AWS Auth (same as before)
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # 3️⃣ Login to ECR
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # 4️⃣ Build Docker image
+      - name: Build Docker image
+        run: |
+          docker build -t $ECR_REPO:$IMAGE_TAG ./app
+
+      # 5️⃣ Tag image
+      - name: Tag Docker image
+        run: |
+          docker tag $ECR_REPO:$IMAGE_TAG \
+          $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG
+
+      # 6️⃣ Push image to ECR
+      - name: Push Docker image to ECR
+        run: |
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG
+
+      # 7️⃣ Setup Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      # 8️⃣ Terraform Init
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
+
+      # 9️⃣ Terraform Apply (DEPLOY TO ECS)
+      - name: Terraform Apply
+        working-directory: terraform
+        run: |
+          terraform apply -auto-approve \
+            -var="image_tag=$IMAGE_TAG" \
+            -var="aws_region=$AWS_REGION"
