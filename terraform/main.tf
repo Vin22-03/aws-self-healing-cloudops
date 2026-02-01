@@ -81,11 +81,9 @@ resource "aws_security_group" "ecs_sg" {
 # -----------------------------
 # CloudWatch Logs
 # -----------------------------
-resource "aws_cloudwatch_log_group" "app" {
-  name              = "/ecs/${var.project}"
-  retention_in_days = 7
+data "aws_cloudwatch_log_group" "app" {
+  name = "/ecs/self-healing-cloudops"
 }
-
 # -----------------------------
 # ECS + IAM
 # -----------------------------
@@ -103,7 +101,7 @@ data "aws_iam_policy_document" "ecs_task_assume" {
   }
 }
 
-resource "aws_iam_role" "task_execution" {
+data "aws_iam_role" "task_execution" {
   name               = "${var.project}-task-exec-role"
   assume_role_policy = data.aws_iam_policy_document.ecs_task_assume.json
 }
@@ -162,7 +160,7 @@ resource "aws_ecs_task_definition" "task" {
         logDriver = "awslogs"
         options = {
           awslogs-region        = var.aws_region
-          awslogs-group         = aws_cloudwatch_log_group.app.name
+          awslogs-group         = data.aws_cloudwatch_log_group.app.name
           awslogs-stream-prefix = "ecs"
         }
       }
