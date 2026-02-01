@@ -1,6 +1,5 @@
 output "ecr_repository_url" {
-  description = "ECR repository URL for Docker image push"
-  value       = aws_ecr_repository.self_healing.repository_url
+  value = data.aws_ecr_repository.self_healing.repository_url
 }
 
 output "ecr_image" {
