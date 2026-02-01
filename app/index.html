@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Self-Healing CloudOps on AWS (by VinCloudOps)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+
+  <!-- Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, Segoe UI, Roboto, Arial, sans-serif;
+      background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+      color: #ffffff;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: auto;
+      padding: 50px 20px;
+    }
+
+    h1 {
+      font-size: 42px;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      color: #cbd5e1;
+      margin-bottom: 40px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(12px);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+
+    .card i {
+      font-size: 28px;
+      color: #38bdf8;
+      margin-bottom: 10px;
+    }
+
+    .card h3 {
+      margin: 8px 0 12px;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .health-card {
+      margin-top: 40px;
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(12px);
+      border-radius: 18px;
+      padding: 26px;
+      border: 1px solid rgba(255,255,255,0.25);
+      text-align: center;
+    }
+
+    .health-status {
+      font-size: 22px;
+      font-weight: 600;
+      margin-top: 10px;
+    }
+
+    .healthy {
+      color: #34d399;
+    }
+
+    .unhealthy {
+      color: #f87171;
+    }
+
+    .timestamp {
+      margin-top: 8px;
+      font-size: 14px;
+      color: #cbd5e1;
+    }
+
+    footer {
+      margin-top: 60px;
+      text-align: center;
+      color: #94a3b8;
+      font-size: 14px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>Self-Healing CloudOps on AWS</h1>
+    <p class="subtitle">
+      A CloudOps-focused project demonstrating automated failure detection,
+      remediation, and recovery using AWS managed services.
+    </p>
+
+    <div class="grid">
+      <div class="card">
+        <i class="fa-solid fa-bullseye"></i>
+        <h3>Objective</h3>
+        <ul>
+          <li>Detect ECS service failures automatically</li>
+          <li>Trigger remediation without human intervention</li>
+          <li>Reduce MTTR using event-driven automation</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <i class="fa-solid fa-gears"></i>
+        <h3>Solution Overview</h3>
+        <ul>
+          <li>CloudWatch alarms for detection</li>
+          <li>EventBridge for incident routing</li>
+          <li>Lambda for automated remediation</li>
+          <li>SNS for operator notifications</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <h3>Failure Scenarios</h3>
+        <ul>
+          <li>Health check failure</li>
+          <li>ECS task crash</li>
+          <li>Service instability</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <i class="fa-solid fa-shield-halved"></i>
+        <h3>CloudOps Philosophy</h3>
+        <ul>
+          <li>Detect early</li>
+          <li>Automate remediation</li>
+          <li>Humans are informed, not required</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="health-card">
+      <i class="fa-solid fa-heart-pulse fa-2x"></i>
+      <div id="health-status" class="health-status">Checking health…</div>
+      <div id="health-time" class="timestamp"></div>
+    </div>
+
+    <footer>
+      Terraform-first • Cost-aware • Destroy-after-documentation
+    </footer>
+  </div>
+
+  <script>
+    async function checkHealth() {
+      const statusEl = document.getElementById("health-status");
+      const timeEl = document.getElementById("health-time");
+
+      try {
+        const res = await fetch("/health", { cache: "no-store" });
+        if (res.ok) {
+          statusEl.textContent = "HEALTHY (200 OK)";
+          statusEl.className = "health-status healthy";
+        } else {
+          statusEl.textContent = "UNHEALTHY";
+          statusEl.className = "health-status unhealthy";
+        }
+      } catch (err) {
+        statusEl.textContent = "UNHEALTHY (No response)";
+        statusEl.className = "health-status unhealthy";
+      }
+
+      timeEl.textContent = "Last checked: " + new Date().toLocaleTimeString();
+    }
+
+    checkHealth();
+    setInterval(checkHealth, 5000);
+  </script>
+</body>
+</html>
