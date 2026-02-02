@@ -1,51 +1,16 @@
 # -----------------------------
-# Networking (VPC + 2 public subnets)
+# Networking (USE EXISTING VPC + SUBNETS)
 # -----------------------------
-resource "aws_vpc" "main" {
-  cidr_block           = var.vpc_cidr
-  enable_dns_hostnames = true
-  enable_dns_support   = true
-  tags = { Name = "${var.project}-vpc" }
+
+data "aws_vpc" "main" {
+  default = true
 }
 
-resource "aws_internet_gateway" "igw" {
-  vpc_id = aws_vpc.main.id
-  tags   = { Name = "${var.project}-igw" }
-}
-
-resource "aws_route_table" "public" {
-  vpc_id = aws_vpc.main.id
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.igw.id
+data "aws_subnets" "public" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.main.id]
   }
-  tags = { Name = "${var.project}-public-rt" }
-}
-
-resource "aws_subnet" "public_a" {
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = var.public_subnet_a_cidr
-  availability_zone       = "${var.aws_region}a"
-  map_public_ip_on_launch = true
-  tags = { Name = "${var.project}-public-a" }
-}
-
-resource "aws_subnet" "public_b" {
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = var.public_subnet_b_cidr
-  availability_zone       = "${var.aws_region}b"
-  map_public_ip_on_launch = true
-  tags = { Name = "${var.project}-public-b" }
-}
-
-resource "aws_route_table_association" "public_a" {
-  subnet_id      = aws_subnet.public_a.id
-  route_table_id = aws_route_table.public.id
-}
-
-resource "aws_route_table_association" "public_b" {
-  subnet_id      = aws_subnet.public_b.id
-  route_table_id = aws_route_table.public.id
 }
 
 # -----------------------------
@@ -53,7 +18,7 @@ resource "aws_route_table_association" "public_b" {
 # -----------------------------
 resource "aws_security_group" "ecs_sg" {
   name   = "${var.project}-ecs-sg"
-  vpc_id = aws_vpc.main.id
+  vpc_id = data.aws_vpc.main.id
 
   ingress {
     from_port   = var.container_port
@@ -67,6 +32,10 @@ resource "aws_security_group" "ecs_sg" {
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.project}-ecs-sg"
   }
 }
 
@@ -114,10 +83,12 @@ resource "aws_ecs_task_definition" "task" {
       image     = local.ecr_image
       essential = true
 
-      portMappings = [{
-        containerPort = var.container_port
-        protocol      = "tcp"
-      }]
+      portMappings = [
+        {
+          containerPort = var.container_port
+          protocol      = "tcp"
+        }
+      ]
 
       logConfiguration = {
         logDriver = "awslogs"
@@ -132,7 +103,7 @@ resource "aws_ecs_task_definition" "task" {
 }
 
 # -----------------------------
-# ECS Service
+# ECS Service (SELF-HEALING LEVEL-1)
 # -----------------------------
 resource "aws_ecs_service" "service" {
   name            = "${var.project}-service"
@@ -142,10 +113,8 @@ resource "aws_ecs_service" "service" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets          = [aws_subnet.public_a.id, aws_subnet.public_b.id]
-    security_groups  = [aws_security_group.ecs_sg.id]
+    subnets         = data.aws_subnets.public.ids
+    security_groups = [aws_security_group.ecs_sg.id]
     assign_public_ip = true
   }
-
-  depends_on = [aws_internet_gateway.igw]
 }
